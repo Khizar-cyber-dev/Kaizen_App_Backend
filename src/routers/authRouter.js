@@ -27,7 +27,7 @@ router.post('/send-verification-otp', authMiddleware, otpRateLimiter, sendOtp);
 router.post('/verify-the-otp', authMiddleware, verifyOtp);
 
 // Reset OTP
-router.post('/reset-otp', resetOtp);
+router.post('/reset-otp', resetOtpRateLimiter, resetOtp);
 
 // Reset Password
 router.post('/reset-password', resetPassword);

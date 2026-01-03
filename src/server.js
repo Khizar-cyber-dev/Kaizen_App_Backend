@@ -9,9 +9,19 @@ import authRouter from './routers/authRouter.js';
 import dailyStatsRouter from './routers/dailyStatsRouter.js';
 import achievementRouter from './routers/achievementsRouter.js';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// CORS configuration
+app.use(cors({
+    origin: true, // Allow all origins for mobile app
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -27,7 +37,7 @@ app.get('/', (req, res) => {
     res.send('Hello, World!');
 });
 
-app.listen(3000, () => {
+app.listen(PORT, () => {
     connectDB();
-    console.log(`Server is running on port ${3000}`);
+    console.log(`Server is running on port ${PORT}`);
 });
