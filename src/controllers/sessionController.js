@@ -148,18 +148,6 @@ export async function closeSession(req, res) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const aiReview = await getAIReview({
-      sessionTitle: session.title,
-      intendedDuration: session.intendedDuration,
-      actualDuration: session.actualDuration,
-      interruptions: session.interruptions || [],
-    });
-
-    // Save AI rating and note
-    session.rating = aiReview.rating;
-    session.notes = aiReview.note;
-    session.aiTips = aiReview.tips;
-
     // 1. Handle Pause Closure FIRST if necessary
     const now = new Date();
     if (session.isPaused) {
@@ -197,6 +185,24 @@ export async function closeSession(req, res) {
       user.totalSessions += 1;
     } else {
       session.status = 'abandoned';
+    }
+
+    // 3. Generate AI Review - AFTER duration is calculated
+    try {
+      const aiReview = await getAIReview({
+        sessionTitle: session.title,
+        intendedDuration: session.intendedDuration,
+        actualDuration: session.actualDuration,
+        interruptions: session.interruptions || 0, // Pass number of interruptions
+      });
+
+      // Save AI rating and note
+      session.rating = aiReview.rating;
+      session.notes = aiReview.note;
+      session.aiTips = aiReview.tips;
+    } catch (aiError) {
+      console.error("AI review generation failed:", aiError);
+      session.notes = "Great work finishing your session!";
     }
 
     await session.save();

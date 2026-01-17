@@ -99,65 +99,54 @@ userSchema.pre('save', async function () {
 
 userSchema.methods.updateStreakOnAppOpen = async function () {
   const today = getUTCDateOnly();
-  const lastActive = this.lastActive
-    ? getUTCDateOnly(this.lastActive)
-    : null;
-
   const todayStr = today.toISOString().split('T')[0];
-  const lastActiveStr = lastActive ? lastActive.toISOString().split('T')[0] : null;
 
-  if (lastActiveStr === todayStr) {
-    // Already opened today, but check achievements anyway to be safe (idempotent)
-    console.log('[DEBUG] App already opened today, checking achievements for safety');
-    try {
-      await checkStreakAchievements(this._id, this);
-    } catch (e) {
-      console.error('Error checking streak achievements:', e);
-    }
-
-    if (!this.activeDates.find(d => getUTCDateOnly(d).toISOString().split('T')[0] === todayStr)) {
-      this.activeDates.push(today);
-      await this.save();
-    }
-    return;
-  }
-
-  if (!lastActive) {
-    this.currentStreak = 1;
-    this.longestStreak = 1;
-  } else {
-    const diff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diff === 1) {
-      // Normal continuation
-      this.currentStreak += 1;
-      try {
-        await checkStreakAchievements(this._id, this);
-        console.log('Streak achievements checked successfully');
-      } catch (e) {
-        console.error('Error checking streak achievements:', e);
-      }
-      // Ensure yesterday (lastActive) is in activeDates
-      const lastActiveStr = lastActive.toISOString().split('T')[0];
-      if (!this.activeDates.find(d => getUTCDateOnly(d).toISOString().split('T')[0] === lastActiveStr)) {
-        this.activeDates.push(lastActive);
-      }
-    }
-  }
-
-  this.longestStreak = Math.max(
-    this.longestStreak,
-    this.currentStreak
-  );
-
-  this.lastActive = today;
-
-  if (!this.activeDates.find(d => getUTCDateOnly(d).toISOString().split('T')[0] === todayStr)) {
+  // 1. Ensure today is in activeDates (deduplicated)
+  const dateExists = this.activeDates.some(d => getUTCDateOnly(d).toISOString().split('T')[0] === todayStr);
+  if (!dateExists) {
     this.activeDates.push(today);
   }
 
+  // 2. Sort and Deduplicate activeDates for calculation
+  const uniqueDates = Array.from(new Set(this.activeDates.map(d => getUTCDateOnly(d).toISOString().split('T')[0])))
+    .sort((a, b) => new Date(b) - new Date(a)); // Descending order (newest first)
+
+  this.activeDates = uniqueDates.map(dStr => new Date(dStr));
+
+  // 3. Calculate current streak (consecutive days backwards from today, allowing 1-day grace)
+  let streak = 0;
+  let curr = new Date(today);
+  let gaps = 0;
+
+  // We loop backwards until we find a gap > 1 day
+  while (true) {
+    const dStr = curr.toISOString().split('T')[0];
+    if (uniqueDates.includes(dStr)) {
+      streak++;
+      gaps = 0; // Reset gap counter
+    } else {
+      gaps++;
+      if (gaps > 1) break; // More than 1 day gap breaks the streak
+    }
+    curr.setUTCDate(curr.getUTCDate() - 1);
+
+    // Safety break to prevent infinite loops if something goes wrong with uniqueDates
+    if (streak > 5000) break;
+  }
+
+  this.currentStreak = streak;
+  this.longestStreak = Math.max(this.longestStreak, this.currentStreak);
+  this.lastActive = today;
+
   this.markModified('activeDates');
   await this.save();
+
+  // 4. Check achievements
+  try {
+    await checkStreakAchievements(this._id, this);
+  } catch (e) {
+    console.error('Error checking streak achievements:', e);
+  }
 };
 
 userSchema.methods.getContributions = function (days = 105) {
@@ -169,21 +158,11 @@ userSchema.methods.getContributions = function (days = 105) {
   // Create a set of date strings "YYYY-MM-DD" for easy lookup
   const activeSet = new Set(this.activeDates.map(d => {
     try {
-      const dateObj = new Date(d);
-      return dateObj.toISOString().split('T')[0];
+      return new Date(d).toISOString().split('T')[0];
     } catch (e) {
       return null;
     }
   }).filter(Boolean));
-
-  // Backfill: If they have a streak, these days MUST be active
-  if (this.currentStreak > 0 && this.lastActive) {
-    let streakDate = getUTCDateOnly(this.lastActive);
-    for (let i = 0; i < this.currentStreak; i++) {
-      activeSet.add(streakDate.toISOString().split('T')[0]);
-      streakDate.setUTCDate(streakDate.getUTCDate() - 1);
-    }
-  }
 
   // Loop exactly 'days' times from startDate to endDate
   let current = new Date(startDate);

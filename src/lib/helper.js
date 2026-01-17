@@ -1,5 +1,8 @@
-import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
+import { Groq } from 'groq-sdk';
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 export function calculateEndDate(startDate, type, customDays = null) {
   const start = new Date(startDate);
@@ -32,6 +35,71 @@ export function calculateEndDate(startDate, type, customDays = null) {
     default:
       return null;
   }
+}
+
+/**
+ * Calculates the current tier for a habit based on its streak.
+ * Falls back to "Seedling" for a friendly empty state.
+ */
+export function calculateHabitTier(habit) {
+  const streak = habit.currentStreak || 0;
+
+  // Filter habit-specific achievements (type: consistency) and sort by streak threshold descending
+  const habitMilestones = Object.values(ACHIEVEMENT_DEFINITIONS)
+    .filter(def => def.type === 'consistency')
+    .sort((a, b) => b.metadata.streak - a.metadata.streak);
+
+  // Find the highest milestone achieved
+  const currentMilestone = habitMilestones.find(m => streak >= m.metadata.streak);
+
+  if (currentMilestone) {
+    return getTierObject(currentMilestone.tier, currentMilestone.title);
+  }
+
+  // Friendly Empty/Initial State
+  return {
+    name: 'Unranked',
+    title: 'Seedling',
+    icon: 'leaf',
+    color: '#10B981' // emerald-500
+  };
+}
+
+function getTierObject(name, title) {
+  return {
+    name,
+    title,
+    icon: getTierIcon(name),
+    color: getTierColor(name)
+  };
+}
+
+function getTierIcon(tier) {
+  const icons = {
+    'bronze': 'medal',
+    'silver': 'medal',
+    'gold': 'trophy',
+    'platinum': 'trophy',
+    'diamond': 'diamond',
+    'elite': 'shield',
+    'legendary': 'flame',
+    'mythic': 'flash'
+  };
+  return icons[tier?.toLowerCase()] || 'medal';
+}
+
+function getTierColor(tier) {
+  const colors = {
+    'bronze': '#CD7F32',
+    'silver': '#C0C0C0',
+    'gold': '#FFD700',
+    'platinum': '#E5E4E2',
+    'diamond': '#B9F2FF',
+    'elite': '#FF4500', // Crimson/Orange for Elite
+    'legendary': '#FFD700',
+    'mythic': '#800080'
+  };
+  return colors[tier?.toLowerCase()] || '#9CA3AF';
 }
 
 export function calculateHabitSuccessRate(habit) {
@@ -303,35 +371,54 @@ export function getUTCDateOnly(date = new Date()) {
 
 export async function getAIReview({ sessionTitle, intendedDuration, actualDuration, interruptions }) {
   try {
-    // Ensure interruptions is a string
     const interruptionsText =
       Array.isArray(interruptions) && interruptions.length > 0
         ? interruptions.join(", ")
         : "none";
 
-    const prompt = `
-      You are a productivity assistant.
-      A user just completed a session titled "${sessionTitle}".
-      Intended duration: ${intendedDuration} minutes
-      Actual duration: ${actualDuration} minutes
-      Interruptions: ${interruptionsText}
+    // Calculate completion percentage for better AI context
+    const completionPercent = (actualDuration / intendedDuration) * 100;
 
-      1. Rate the user's performance out of 5 stars.
-      2. Provide a short note summarizing their session.
-      3. Give tips to improve focus and motivation for next session.
+    const prompt = `
+      You are a high-performance productivity & focus coach.
+      A user has just finished a focus session:
+      - Title: "${sessionTitle}"
+      - Target Goal: ${intendedDuration} minutes
+      - Actual Time Focused: ${actualDuration} minutes
+      - Completion: ${completionPercent.toFixed(1)}%
+      - Occurrences of Interruption/Pause: ${interruptionsText}
+
+      Your task is to review this session. Follow these guidelines:
+      1. Appreciation: Start by acknowledging their effort. Even a short session is a win for discipline.
+      2. Rating: Give a 1 to 5 star rating. 
+         - 5 stars: Completed the full target with 0-1 interruptions.
+         - 4 stars: Highly focused, mostly completed.
+         - 3 stars: Good effort but needs more consistency.
+         - 1-2 stars: Very high interruptions or very short compared to target.
+      3. Insight (Note): Provide an encouraging, personalized summary. Use a professional yet motivating tone. Mention the title of their work.
+      4. Growth Tip: Provide 1 actionable advice to help them stay deeper in focus next time (e.g., environment, mindset, physical state, or planning). Avoid technical advice about the app itself.
 
       Return JSON only in this format:
       {
-        "rating": 4.5,
-        "note": "Great job! You stayed focused despite some interruptions.",
-        "tips": "Try setting phone on silent and close unrelated tabs."
+        "rating": number,
+        "note": "string",
+        "tips": "string"
       }
     `;
 
-    const { text } = await generateText({
-      model: google("gemini-1.5-flash"),
-      prompt,
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      model: "openai/gpt-oss-120b",
+      temperature: 1,
+      response_format: { type: "json_object" },
     });
+
+    const text = chatCompletion.choices[0]?.message?.content || "";
 
     // Try to extract JSON safely
     const jsonMatch = text.match(/\{[\s\S]*\}/);

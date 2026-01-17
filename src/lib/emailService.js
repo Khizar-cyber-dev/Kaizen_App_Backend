@@ -1,36 +1,43 @@
 import transporter from '../config/nodeMailer.js';
-import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
+import { Groq } from 'groq-sdk';
 
-// export async function generateEmailContent(prompt) {
-//   try {
-//     const { text } = await generateText({
-//       model: google("gemini-2.0-flash-001"),
-//       prompt: `
-//         You are an email assistant.
-//         Return ONLY valid JSON in this format:
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
-//         {
-//           "subject": "Email subject",
-//           "html": "<p>Email body in HTML</p>"
-//         }
+export async function generateEmailContent(prompt) {
+  try {
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "user",
+          content: `
+            You are an email assistant.
+            Return ONLY valid JSON in this format:
 
-//         Prompt:
-//         ${prompt}
-//               `,
-//     });
+            {
+              "subject": "Email subject",
+              "html": "<p>Email body in HTML</p>"
+            }
 
-//     // Parse strict JSON
-//     return JSON.parse(text);
+            Prompt:
+            ${prompt}
+          `,
+        },
+      ],
+      model: "openai/gpt-oss-120b",
+      temperature: 1,
+      response_format: { type: "json_object" },
+    });
 
-//   } catch (error) {
-//     console.error("Email AI Error:", error);
-//     return {
-//       subject: "Productivity Update",
-//       html: "<p>Keep going. You're doing great.</p>",
-//     };
-//   }
-// }
+    const text = chatCompletion.choices[0]?.message?.content || "";
+    return JSON.parse(text);
+
+  } catch (error) {
+    console.error("Email AI Error:", error);
+    return null;
+  }
+}
 
 
 /**
@@ -137,19 +144,71 @@ const getEmailTemplate = (subject, content) => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>📊 DeathWalk Productivity</h1>
+          <h1>📊 Kizen Productivity</h1>
         </div>
         <div class="content">
           ${content}
         </div>
         <div class="footer">
           <p>Keep pushing forward! Every step counts.</p>
-          <p><strong>The DeathWalk Team</strong></p>
+          <p><strong>The Kizen Team</strong></p>
         </div>
       </div>
     </body>
     </html>
   `;
+};
+
+/**
+ * Send a coaching-style welcome email for new users
+ */
+export const sendWelcomeEmail = async (user) => {
+  try {
+    if (!user.email) return;
+
+    const prompt = `
+      You are a high-performance personal growth coach welcoming a new user to "Kizen".
+      The name "Kizen" is inspired by the philosophy of continuous improvement (Kaizen).
+      
+      User: ${user.name}
+      
+      Create a welcoming and electric message that:
+      1. Celebrates their decision to join the 1% of people who take their growth seriously.
+      2. Briefly explains that Kizen is their partner in building discipline, not just another habit tracker.
+      3. Sets a "No Shame" policy: Setbacks are data, not failures.
+      4. Gives 1 short "Day 1 Hack" for consistency.
+      5. Invites them to start their first focus session today.
+      
+      The tone should be energetic, inspiring, and professional.
+      
+      Return JSON format:
+      {
+        "subject": "Email subject (Electric & Welcoming)",
+        "html": "HTML content with the welcome coaching message"
+      }
+    `;
+
+    let emailContent = await generateEmailContent(prompt);
+
+    if (!emailContent) {
+      emailContent = {
+        subject: `Welcome to Kizen, ${user.name}! 🚀`,
+        html: `<h2>The Journey Begins!</h2><p>Welcome to Kizen. We're here to help you turn your potential into performance. Ready to start your first session?</p>`
+      };
+    }
+
+    const mailOptions = {
+      from: process.env.SENDER_EMAIL || 'noreply@kizen.com',
+      to: user.email,
+      subject: emailContent.subject,
+      html: getEmailTemplate(emailContent.subject, emailContent.html)
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Welcome coaching email sent to ${user.email}`);
+  } catch (error) {
+    console.error('Error sending welcome email:', error);
+  }
 };
 
 /**
@@ -160,47 +219,49 @@ export const sendGoalFailureEmail = async (user, goals) => {
     if (!user.email || !user.notificationsEnabled) return;
 
     const prompt = `
-      Generate a compassionate email notification for a user whose goals have failed.
+      You are a high-performance personal growth coach who deeply cares about the user's journey.
+      A user's goals have reached their deadline without being completed.
       
       User: ${user.name}
       Failed Goals:
-      ${goals.map(g => `- ${g.title}: ${g.description || 'No description'}, Type: ${g.type}, End Date: ${new Date(g.endDate).toLocaleDateString()}`).join('\n')}
+      ${goals.map(g => `- ${g.title}: ${g.description || 'No description'}`).join('\n')}
       
-      Create a motivating message that:
-      1. Acknowledges the failure without being harsh
-      2. Encourages the user to set new goals
-      3. Suggests learning from the experience
-      4. Motivates them to keep going
+      Create a deeply compassionate and motivating message.
+      - DO NOT use corporate or cold language.
+      - Acknowledge that life happens and setbacks are just data for the next attempt.
+      - Remind them that the "Kizen" community (the app) still believes in their potential.
+      - Encourage them to "Review, Refine, and Restart".
+      - Give 1 small, actionable tip on how to break down a big goal next time.
       
       Return JSON format:
       {
-        "subject": "Email subject (max 60 chars)",
-        "html": "HTML content with motivational message"
+        "subject": "Email subject (Warm & Encouraging)",
+        "html": "HTML content with the coaching message"
       }
     `;
 
-    //let emailContent = await generateEmailContent(prompt);
+    let emailContent = await generateEmailContent(prompt);
 
-    //    if (!emailContent) {
-    // Fallback template
-    const emailContent = {
-      subject: 'Goals Update - Time to Reflect',
-      html: `
-          <h2>Hello ${user.name},</h2>
-          <p>We noticed that some of your goals have reached their deadline without completion:</p>
-          <ul>
-            ${goals.map(g => `<li><strong>${g.title}</strong> - ${g.type} goal</li>`).join('')}
-          </ul>
-          <div class="highlight">
-            <p><strong>Remember:</strong> Setbacks are part of the journey. Use this as a learning opportunity to set new, achievable goals.</p>
-          </div>
-          <p>Don't give up! Let's create new goals and keep moving forward. 💪</p>
-        `
-    };
-    //    }
+    if (!emailContent) {
+      // Fallback template
+      emailContent = {
+        subject: 'Goals Update - Time to Reflect',
+        html: `
+            <h2>Hello ${user.name},</h2>
+            <p>We noticed that some of your goals have reached their deadline without completion:</p>
+            <ul>
+              ${goals.map(g => `<li><strong>${g.title}</strong> - ${g.type} goal</li>`).join('')}
+            </ul>
+            <div class="highlight">
+              <p><strong>Remember:</strong> Setbacks are part of the journey. Use this as a learning opportunity to set new, achievable goals.</p>
+            </div>
+            <p>Don't give up! Let's create new goals and keep moving forward. 💪</p>
+          `
+      };
+    }
 
     const mailOptions = {
-      from: process.env.SENDER_EMAIL || 'noreply@deathwalk.com',
+      from: process.env.SENDER_EMAIL || 'noreply@kizen.com',
       to: user.email,
       subject: emailContent.subject,
       html: getEmailTemplate(emailContent.subject, emailContent.html)
@@ -227,52 +288,52 @@ export const sendDailyReminderEmail = async (user, incompleteHabits, timeOfDay) 
     };
 
     const prompt = `
-      Generate a friendly reminder email for a user about incomplete habits.
+      You are a supportive accountability partner. 
+      The user hasn't finished some of their habits yet for today.
       
       User: ${user.name}
-      Current Streak: ${user.currentStreak} days
       Time of Day: ${timeLabels[timeOfDay]}
       Incomplete Habits Today:
-      ${incompleteHabits.map(h => `- ${h.title}: ${h.currentStreak} day streak, Target: ${h.sessionMinutes} minutes`).join('\n')}
+      ${incompleteHabits.map(h => `- ${h.title} (Current Streak: ${h.currentStreak} days)`).join('\n')}
       
-      Create a motivating reminder that:
-      1. Is appropriate for the time of day (morning/afternoon/evening)
-      2. Gently reminds about incomplete habits
-      3. Motivates without being pushy
-      4. Emphasizes maintaining the streak
+      Create a warm and motivating reminder that:
+      1. Uses a "Win the ${timeLabels[timeOfDay]}" theme to keep it fresh and relevant.
+      2. Gently nudges them to take action without being pushy or robotic.
+      3. Mentions that staying consistent with their habits is how they build the person they want to become.
+      4. Provides 1 tiny piece of advice to overcome friction (e.g., "Just do 2 minutes", "Set a timer for 5 mins", or "Start with the easiest task").
       
       Return JSON format:
       {
-        "subject": "Email subject (max 60 chars)",
-        "html": "HTML content with reminder message"
+        "subject": "Subject (Upbeat, motivating, and time-aware)",
+        "html": "HTML content with the supportive reminder"
       }
     `;
 
-    // let emailContent = await generateEmailContent(prompt);
+    let emailContent = await generateEmailContent(prompt);
 
-    //    if (!emailContent) {
-    // Fallback template
-    const emailContent = {
-      subject: `${timeLabels[timeOfDay]} Reminder - Complete Your Habits`,
-      html: `
-          <h2>Hello ${user.name},</h2>
-          <p>Good ${timeLabels[timeOfDay].toLowerCase()}! Don't forget to complete your habits today to maintain your ${user.currentStreak}-day streak! 🔥</p>
-          <p><strong>Habits still pending today:</strong></p>
-          <ul class="habit-list">
-            ${incompleteHabits.map(h => `
-              <li class="habit-item">
-                <div class="habit-title">${h.title}</div>
-                <div class="streak-info">Current streak: ${h.currentStreak} days${h.sessionMinutes ? ` | Target: ${h.sessionMinutes} minutes` : ''}</div>
-              </li>
-            `).join('')}
-          </ul>
-          <p>You've got this! Keep your momentum going. 💪</p>
-        `
-    };
-    //    }
+    if (!emailContent) {
+      // Fallback template
+      emailContent = {
+        subject: `${timeLabels[timeOfDay]} Reminder - Complete Your Habits`,
+        html: `
+            <h2>Hello ${user.name},</h2>
+            <p>Good ${timeLabels[timeOfDay].toLowerCase()}! Don't forget to complete your habits today to maintain your ${user.currentStreak}-day streak! 🔥</p>
+            <p><strong>Habits still pending today:</strong></p>
+            <ul class="habit-list">
+              ${incompleteHabits.map(h => `
+                <li class="habit-item">
+                  <div class="habit-title">${h.title}</div>
+                  <div class="streak-info">Current streak: ${h.currentStreak} days${h.sessionMinutes ? ` | Target: ${h.sessionMinutes} minutes` : ''}</div>
+                </li>
+              `).join('')}
+            </ul>
+            <p>You've got this! Keep your momentum going. 💪</p>
+          `
+      };
+    }
 
     const mailOptions = {
-      from: process.env.SENDER_EMAIL || 'noreply@deathwalk.com',
+      from: process.env.SENDER_EMAIL || 'noreply@kizen.com',
       to: user.email,
       subject: emailContent.subject,
       html: getEmailTemplate(emailContent.subject, emailContent.html)
@@ -293,61 +354,61 @@ export const sendMissedDayEmail = async (user, missedHabits) => {
     if (!user.email || !user.notificationsEnabled) return;
 
     const prompt = `
-      Generate a supportive email for a user who missed completing habits today or didn't use the app.
+      You are a compassionate coach reaching out because the user missed a day or missed some habits. 
+      The tone should be: "We missed you, and we're here to help you get back into the flow."
       
       User: ${user.name}
       Current Streak: ${user.currentStreak} days
-      Longest Streak: ${user.longestStreak} days
-      Missed Habits Today:
-      ${missedHabits.length > 0 ? missedHabits.map(h => `- ${h.title}: ${h.currentStreak} day streak at risk`).join('\n') : 'No specific habits missed (user did not use app)'}
+      Missed Habits:
+      ${missedHabits.length > 0 ? missedHabits.map(h => `- ${h.title}`).join('\n') : 'The user didn\'t check in at all today.'}
       
-      Create a message that:
-      1. Gently reminds about the missed day
-      2. Encourages them to come back tomorrow to not break their streak
-      3. Is supportive and non-judgmental
-      4. Motivates them to get back on track
+      Guidelines:
+      1. Normalize the lapse. Remind them that perfection is not the goal—consistency is.
+      2. Remind them that "Never Miss Twice" is the golden rule of habit formation.
+      3. Be highly supportive and non-judgmental. No "guilt-tripping".
+      4. Invite them back for a fresh start tomorrow. Share a tiny tip for a "easy win" tomorrow.
       
       Return JSON format:
       {
-        "subject": "Email subject (max 60 chars)",
-        "html": "HTML content with supportive message"
+        "subject": "Subject (Supportive, welcoming, and low-pressure)",
+        "html": "HTML content with the comforting message"
       }
     `;
 
-    //    let emailContent = await generateEmailContent(prompt);
+    let emailContent = await generateEmailContent(prompt);
 
-    //    if (!emailContent) {
-    // Fallback template
-    const emailContent = {
-      subject: 'Don\'t Break Your Streak - Come Back Tomorrow!',
-      html: `
-          <h2>Hello ${user.name},</h2>
-          <div class="highlight">
-            <p><strong>You missed today, but don't worry!</strong> Tomorrow is a fresh start. Come back to keep your ${user.currentStreak}-day streak alive! 🔥</p>
-          </div>
-          ${missedHabits.length > 0 ? `
-            <p><strong>Habits that were missed today:</strong></p>
-            <ul class="habit-list">
-              ${missedHabits.map(h => `
-                <li class="habit-item">
-                  <div class="habit-title">${h.title}</div>
-                  <div class="streak-info">Current streak of ${h.title}: ${h.currentStreak} days - Don't let it break!</div>
-                </li>
-              `).join('')}
+    if (!emailContent) {
+      // Fallback template
+      emailContent = {
+        subject: 'Don\'t Break Your Streak - Come Back Tomorrow!',
+        html: `
+            <h2>Hello ${user.name},</h2>
+            <div class="highlight">
+              <p><strong>You missed today, but don't worry!</strong> Tomorrow is a fresh start. Come back to keep your ${user.currentStreak}-day streak alive! 🔥</p>
+            </div>
+            ${missedHabits.length > 0 ? `
+              <p><strong>Habits that were missed today:</strong></p>
+              <ul class="habit-list">
+                ${missedHabits.map(h => `
+                  <li class="habit-item">
+                    <div class="habit-title">${h.title}</div>
+                    <div class="streak-info">Current streak of ${h.title}: ${h.currentStreak} days - Don't let it break!</div>
+                  </li>
+                `).join('')}
+              </ul>
+            ` : '<p>We noticed you didn\'t use the app today. Make sure to come back tomorrow to maintain your progress!</p>'}
+            <p><strong>Your Stats:</strong></p>
+            <ul>
+              <li>Current Streak: ${user.currentStreak} days</li>
+              <li>Longest Streak: ${user.longestStreak} days</li>
             </ul>
-          ` : '<p>We noticed you didn\'t use the app today. Make sure to come back tomorrow to maintain your progress!</p>'}
-          <p><strong>Your Stats:</strong></p>
-          <ul>
-            <li>Current Streak: ${user.currentStreak} days</li>
-            <li>Longest Streak: ${user.longestStreak} days</li>
-          </ul>
-          <p>Tomorrow is your chance to get back on track. You've got this! 💪</p>
-        `
-    };
-    //    }
+            <p>Tomorrow is your chance to get back on track. You've got this! 💪</p>
+          `
+      };
+    }
 
     const mailOptions = {
-      from: process.env.SENDER_EMAIL || 'noreply@deathwalk.com',
+      from: process.env.SENDER_EMAIL || 'noreply@kizen.com',
       to: user.email,
       subject: emailContent.subject,
       html: getEmailTemplate(emailContent.subject, emailContent.html)
@@ -361,7 +422,7 @@ export const sendMissedDayEmail = async (user, missedHabits) => {
 };
 
 /**
- * Send weekly review email using Gemini
+ * Send weekly review email using AI
  */
 export const sendWeeklyReviewEmail = async (user, habits, sessions, stats) => {
   try {
@@ -379,54 +440,40 @@ export const sendWeeklyReviewEmail = async (user, habits, sessions, stats) => {
       : 0;
 
     const prompt = `
-      Generate a comprehensive weekly review email for a productivity app user.
+      You are a high-performance productivity analyst and coach.
+      Generate a comprehensive weekly review email that feels like a premium, personalized performance report.
       
-      USER PROFILE:
+      USER PERFORMANCE DATA (Last 7 Days):
       - Name: ${user.name}
-      - Current Streak: ${user.currentStreak} days
-      - Longest Streak: ${user.longestStreak} days
-      - Total Sessions (all time): ${user.totalSessions}
-      
-      WEEKLY PERFORMANCE (last 7 days):
-      - Sessions Completed: ${recentSessions.length}
-      - Average Duration: ${avgDuration} minutes
-      - Average Focus Rating: ${avgRating}/5
+      - Total Sessions Completed: ${recentSessions.length}
+      - Avg Session Duration: ${avgDuration} minutes
+      - Avg Focus Rating: ${avgRating}/5
       - Abandoned Sessions: ${recentSessions.filter(s => s.status === 'abandoned').length}
+      - Habit Statistics: ${habits.map(h => `${h.title}: ${h.successRate.toFixed(0)}% completion`).join(', ')}
       
-      HABITS PERFORMANCE:
-      ${habits.map(h => `
-        • ${h.title}: 
-          - Current Streak: ${h.currentStreak} days
-          - Longest Streak: ${h.longestStreak} days
-          - Total Sessions: ${h.totalSessionsCompleted}
-          - Success Rate: ${h.successRate.toFixed(1)}%
-          - Average Session Time: ${Math.round(h.averageSessionTime)} minutes
-      `).join('')}
+      Your review must include:
+      1. "The Big Picture": A warm celebration of their momentum and showing up.
+      2. "Celebrate the Wins": Specifically highlight their best performing habit or focus session.
+      3. "The Growth Gap (Coaching Tips)": Identify where they struggled (e.g., abandoned sessions, low completion rates) and provide 2 specific, actionable coaching tips to overcome these "lacks".
+      4. "Your Mission for Next Week": Give them 1 clear focus area or a small challenge to aim for.
       
-      Create a comprehensive weekly review that includes:
-      1. A warm greeting and celebration of achievements
-      2. Key highlights from the week (best performances)
-      3. Areas for improvement (habits with low streaks, missed sessions)
-      4. Personalized tips for the coming week based on patterns
-      5. Motivational closing message
-      
-      Make it engaging, personalized, and actionable. Use HTML formatting with paragraphs, lists, and emphasis.
+      The tone must be professional yet deeply caring, showing that the app is truly invested in their growth. Use rich HTML formatting.
       
       Return JSON format:
       {
-        "subject": "Email subject (max 70 chars)",
-        "html": "Rich HTML content with the weekly review"
+        "subject": "Weekly Review: [Provide a Motivating or Insightful Headline]",
+        "html": "Rich HTML content for the weekly review"
       }
     `;
 
-    //    let emailContent = await generateEmailContent(prompt);
+    let emailContent = await generateEmailContent(prompt);
 
-    //    if (!emailContent) {
-    // Fallback template
-    const topHabit = habits.length > 0 ? habits.reduce((a, b) => a.currentStreak > b.currentStreak ? a : b) : null;
-    const emailContent = {
-      subject: `Weekly Review - ${user.name}'s Progress`,
-      html: `
+    if (!emailContent) {
+      // Fallback template
+      const topHabit = habits.length > 0 ? habits.reduce((a, b) => a.currentStreak > b.currentStreak ? a : b) : null;
+      emailContent = {
+        subject: `Weekly Review - ${user.name}'s Progress`,
+        html: `
           <h2>Hello ${user.name}! 👋</h2>
           <p>Here's your weekly productivity review:</p>
           
@@ -454,11 +501,11 @@ export const sendWeeklyReviewEmail = async (user, habits, sessions, stats) => {
           
           <p><strong>Keep up the great work!</strong> Every session brings you closer to your goals. 💪</p>
         `
-    };
-    //    }
+      };
+    }
 
     const mailOptions = {
-      from: process.env.SENDER_EMAIL || 'noreply@deathwalk.com',
+      from: process.env.SENDER_EMAIL || 'noreply@kizen.com',
       to: user.email,
       subject: emailContent.subject,
       html: getEmailTemplate(emailContent.subject, emailContent.html)
@@ -471,3 +518,51 @@ export const sendWeeklyReviewEmail = async (user, habits, sessions, stats) => {
   }
 };
 
+/**
+ * Send streak milestone celebration email
+ */
+export const sendStreakMilestoneEmail = async (user, milestone) => {
+  try {
+    if (!user.email || !user.notificationsEnabled) return;
+
+    const prompt = `
+      You are a high-energy celebration assistant! A user just hit a major consistency milestone.
+      
+      User: ${user.name}
+      Milestone: ${milestone} days of total app consistency
+      
+      Create a vibrant and celebratory email that:
+      1. Throws a "digital party" for their incredible discipline.
+      2. Reminds them that they are now in the elite tier of focused users.
+      3. Encourages them toward the next milestone.
+      4. Expresses how proud the "Kizen" community is of their persistent growth.
+      
+      Return JSON format:
+      {
+        "subject": "Subject (High energy, celebratory, and acknowledging their power)",
+        "html": "HTML content that feels like a reward/celebration"
+      }
+    `;
+
+    let emailContent = await generateEmailContent(prompt);
+
+    if (!emailContent) {
+      emailContent = {
+        subject: `🔥 Incredible! You've reached a ${milestone}-Day Streak!`,
+        html: `<h2>Unstoppable, ${user.name}!</h2><p>You have maintained your streak for <strong>${milestone} days</strong>. That level of discipline is what separates the dreamers from the achievers. keep that flame burning bright! 🚀</p>`
+      };
+    }
+
+    const mailOptions = {
+      from: process.env.SENDER_EMAIL || 'noreply@kizen.com',
+      to: user.email,
+      subject: emailContent.subject,
+      html: getEmailTemplate(emailContent.subject, emailContent.html)
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Streak milestone email sent to ${user.email} for ${milestone} days`);
+  } catch (error) {
+    console.error('Error sending streak milestone email:', error);
+  }
+};

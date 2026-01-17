@@ -1,6 +1,6 @@
 import Habit from "../models/Habit.js";
 import FocusSession from "../models/FocusSession.js";
-import { getUTCDateOnly } from "../lib/helper.js";
+import { getUTCDateOnly, calculateHabitTier } from "../lib/helper.js";
 import { checkHabitAchievements } from "./achievementController.js";
 
 export async function createHabit(req, res) {
@@ -132,27 +132,11 @@ export async function getHabits(req, res) {
         type: habit.type,
         currentStreak: habit.currentStreak,
         longestStreak: habit.longestStreak,
-        tier: (() => {
-          const tierWeights = { 'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4, 'diamond': 5, 'elite': 6, 'legendary': 7, 'mythic': 8 };
-          const achievements = newAchievements || [];
-          if (achievements.length === 0) return habit.tier || 'bronze';
-
-          let maxWeight = tierWeights[habit.tier?.toLowerCase()] || 1;
-          let bestTier = habit.tier || 'bronze';
-
-          achievements.forEach(a => {
-            const weight = tierWeights[a.tier?.toLowerCase()] || 1;
-            if (weight > maxWeight) {
-              maxWeight = weight;
-              bestTier = a.tier;
-            }
-          });
-          return bestTier;
-        })(),
+        tier: calculateHabitTier(habit),
         contributions,
         sessionMinutes: habit.sessionMinutes,
         newAchievements: newAchievements.length > 0 ? newAchievements : undefined,
-        activeSessionId // Pass this to frontend
+        activeSessionId
       });
     }
 

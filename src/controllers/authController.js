@@ -3,6 +3,9 @@ import transporter from "../config/nodeMailer.js";
 import setCookies from "../lib/Cookies.js";
 import { generateToken, getStoredRefreshToken, removeRefreshToken, storeRefreshToken, verifyToken } from "../lib/Token.js";
 import User from "../models/User.js";
+import {
+    sendWelcomeEmail
+} from '../lib/emailService.js';
 
 export const register = async (req, res) => {
     try {
@@ -24,30 +27,8 @@ export const register = async (req, res) => {
         user.password = undefined;
 
         try {
-            const mailOptions = {
-                from: "khizarasim33@gmail.com",
-                to: user.email,
-                subject: 'Welcome to DeathWalk Team!',
-                html: `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <h2 style="color: #333;">Welcome to DeathWalk Team!</h2>
-                        <p>Hello <strong>${user.name}</strong>,</p>
-                        <p>Thank you for registering at our app to your death! We're excited to have you on board.</p>
-                        <p>If you have any questions, feel free to reach out to our support team.</p>
-                        <br>
-                        <p>Best regards,</p>
-                        <p><strong>The DeathWalk Team</strong></p>
-                    </div>
-                `,
-                text: `Hello ${user.name},\n\nThank you for registering at our app!\n\nBest regards,\nThe Team DeathWalk.`
-            };
-
-            console.log("Attempting to send email to:", user.email);
-            console.log("From email:", process.env.SENDER_EMAIL);
-
-            const emailResult = await transporter.sendMail(mailOptions);
-            console.log("Email sent successfully:", emailResult.messageId);
-
+            // Send welcome coaching email using AI
+            await sendWelcomeEmail(user);
         } catch (emailError) {
             console.error('Email sending failed:', emailError);
         }
@@ -78,6 +59,10 @@ export const login = async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid email or password' });
         }
+
+        // Update streak and activeDates on successful login
+        await user.updateStreakOnAppOpen();
+
         const { accessToken, refreshToken } = await generateToken(user._id);
         setCookies(res, accessToken, refreshToken);
         storeRefreshToken(user._id, refreshToken);
@@ -199,7 +184,7 @@ export const sendOtp = async (req, res) => {
             const mailOptions = {
                 from: process.env.SENDER_EMAIL,
                 to: user.email,
-                subject: 'DeathWalk Team!',
+                subject: 'Kizen Team!',
                 html: EMAIL_VERIFY_TEMPLATE.replace('{{otp}}', otp).replace('{{email}}', user.email)
             };
             await transporter.sendMail(mailOptions);
@@ -261,7 +246,7 @@ export const resetOtp = async (req, res) => {
             const mailOptions = {
                 from: process.env.SENDER_EMAIL,
                 to: user.email,
-                subject: 'DeathWalk Team - Password Reset OTP',
+                subject: 'Kizen Team - Password Reset OTP',
                 html: PASSWORD_RESET_TEMPLATE.replace('{{email}}', user.email).replace('{{otp}}', otp)
             };
             await transporter.sendMail(mailOptions);
@@ -338,6 +323,9 @@ export const syncClerkUser = async (req, res) => {
                 updated = true;
             }
             if (updated) await user.save();
+
+            // Update streak and activeDates on returning sync
+            await user.updateStreakOnAppOpen();
         }
 
         const { accessToken, refreshToken } = await generateToken(user._id);

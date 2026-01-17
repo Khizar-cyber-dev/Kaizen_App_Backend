@@ -1,13 +1,14 @@
 import 'dotenv/config';
 import express from 'express';
 import connectDB from './config/db.js';
-import './config/corn.js'; // Import cron jobs
+import './config/cron.js'; // Import cron jobs
 import goalRouter from './routers/goalRouter.js';
 import sessionRouter from './routers/sessionRouter.js';
 import habitRouter from './routers/habitRouter.js';
 import authRouter from './routers/authRouter.js';
 import dailyStatsRouter from './routers/dailyStatsRouter.js';
 import achievementRouter from './routers/achievementsRouter.js';
+import cronRouter from './routers/cronRouter.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 
@@ -32,6 +33,7 @@ app.use('/api/habits', habitRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/daily-stats', dailyStatsRouter);
 app.use('/api/achievements', achievementRouter);
+app.use('/api/cron', cronRouter);
 
 app.get('/', (req, res) => {
     res.send('Hello, World!');
