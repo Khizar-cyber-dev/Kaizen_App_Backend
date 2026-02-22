@@ -1,9 +1,5 @@
+import { groq } from '../config/groq.js';
 import transporter from '../config/nodeMailer.js';
-import { Groq } from 'groq-sdk';
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
 
 export async function generateEmailContent(prompt) {
   try {

@@ -52,9 +52,6 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
-  lastNotificationSent: {
-    type: Date,
-  },
   verifyOtp: {
     type: String,
     default: ''
@@ -84,7 +81,7 @@ const userSchema = new mongoose.Schema({
 userSchema.pre('save', async function () {
   if (!this.password) return;
   if (!this.isModified('password')) {
-    console.log('[DEBUG] Password not modified, skipping hash');
+    console.log('Password not modified, skipping hash');
     return;
   }
 
@@ -92,7 +89,7 @@ userSchema.pre('save', async function () {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
   } catch (error) {
-    console.error('[DEBUG] Password hash error:', error);
+    console.error('Password hash error:', error);
     throw error;
   }
 });

@@ -2,11 +2,17 @@ import cron from 'node-cron';
 import * as cronService from '../services/cronService.js';
 
 // Run at midnight to check goal completion and send emails for failed goals
+// Run every day at 00:00 UTC to reset todays_done for all habits
 cron.schedule('0 0 * * *', async () => {
     try {
         await cronService.checkGoalCompletion();
     } catch (error) {
         console.error('Error in goal completion check cron:', error);
+    }
+     try {
+        await cronService.resetDailyHabits();
+    } catch (err) {
+        console.error('Error in daily reset cron:', err);
     }
 });
 
@@ -34,14 +40,5 @@ cron.schedule("0 9 * * 1", async () => {
         await cronService.sendWeeklyReviews();
     } catch (error) {
         console.error('Error in weekly review job cron:', error);
-    }
-});
-
-// Run every day at 00:00 UTC to reset todays_done for all habits
-cron.schedule('0 0 * * *', async () => {
-    try {
-        await cronService.resetDailyHabits();
-    } catch (err) {
-        console.error('Error in daily reset cron:', err);
     }
 });
