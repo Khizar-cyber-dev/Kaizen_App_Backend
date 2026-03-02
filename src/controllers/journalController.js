@@ -1,4 +1,4 @@
-import Journel from "../models/Journel.js";
+import Journal from "../models/Journal.js";
 import { getUTCDateOnly } from "../lib/helper.js";
 import redis from "../config/redis.js";
 import {
@@ -7,16 +7,6 @@ import {
 } from "../services/journalAIService.js";
 
 const WEEKLY_INSIGHT_TTL_SECONDS = 6 * 60 * 60;
-
-function normalizeDateOnly(dateInput) {
-  const parsed = new Date(dateInput);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return getUTCDateOnly(parsed);
-}
 
 function hasMoreThanThree(items) {
   return Array.isArray(items) && items.length > 3;
@@ -67,15 +57,15 @@ function validateJournalPayload({ morning, evening }) {
   return null;
 }
 
-export const createMorningJournel = async (req, res) => {
+export const createMorningJournal = async (req, res) => {
   try {
-    const { userId, date, morning } = req.body;
+    const { userId, morning } = req.body;
 
-    if (!userId || !date || !morning) {
+    if (!userId || !morning) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const normalizedDate = normalizeDateOnly(date);
+    const normalizedDate = getUTCDateOnly();
     if (!normalizedDate) {
       return res.status(400).json({ message: "Invalid date" });
     }
@@ -85,13 +75,15 @@ export const createMorningJournel = async (req, res) => {
       return res.status(400).json({ message: validationError });
     }
 
-    const journel = await Journel.findOneAndUpdate(
+    const journal = await Journal.findOneAndUpdate(
       { userId, date: normalizedDate },
       {
         $set: {
+          morning,
+        },
+        $setOnInsert: {
           userId,
           date: normalizedDate,
-          morning,
         },
       },
       {
@@ -104,24 +96,24 @@ export const createMorningJournel = async (req, res) => {
     await invalidateWeeklyInsightCache(userId, normalizedDate);
 
     return res.status(201).json({
-      message: "Morning journel saved successfully",
-      journel,
+      message: "Morning journal saved successfully",
+      journal,
     });
   } catch (error) {
-    console.error("Error saving morning journel:", error);
+    console.error("Error saving morning journal:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export const createEveningJournel = async (req, res) => {
+export const createEveningJournal = async (req, res) => {
   try {
-    const { userId, date, evening } = req.body;
+    const { userId, evening } = req.body;
 
-    if (!userId || !date || !evening) {
+    if (!userId || !evening) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const normalizedDate = normalizeDateOnly(date);
+    const normalizedDate = getUTCDateOnly();
     if (!normalizedDate) {
       return res.status(400).json({ message: "Invalid date" });
     }
@@ -131,13 +123,15 @@ export const createEveningJournel = async (req, res) => {
       return res.status(400).json({ message: validationError });
     }
 
-    const journel = await Journel.findOneAndUpdate(
+    const journal = await Journal.findOneAndUpdate(
       { userId, date: normalizedDate },
       {
         $set: {
+          evening,
+        },
+        $setOnInsert: {
           userId,
           date: normalizedDate,
-          evening,
         },
       },
       {
@@ -150,16 +144,16 @@ export const createEveningJournel = async (req, res) => {
     await invalidateWeeklyInsightCache(userId, normalizedDate);
 
     return res.status(200).json({
-      message: "Evening journel saved successfully",
-      journel,
+      message: "Evening journal saved successfully",
+      journal,
     });
   } catch (error) {
-    console.error("Error saving evening journel:", error);
+    console.error("Error saving evening journal:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export const getJournelByDate = async (req, res) => {
+export const getJournalByDate = async (req, res) => {
   try {
     const { userId, date } = req.query;
 
@@ -167,27 +161,27 @@ export const getJournelByDate = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const normalizedDate = normalizeDateOnly(date);
+    const normalizedDate = getUTCDateOnly(date);
     if (!normalizedDate) {
       return res.status(400).json({ message: "Invalid date" });
     }
 
-    const journel = await Journel.findOne({ userId, date: normalizedDate });
+    const journal = await Journal.findOne({ userId, date: normalizedDate });
 
-    if (!journel) {
+    if (!journal) {
       return res
         .status(404)
-        .json({ message: "Journel entry not found for the given user and date" });
+        .json({ message: "Journal entry not found for the given user and date" });
     }
 
-    return res.status(200).json({ journel });
+    return res.status(200).json({ journal });
   } catch (error) {
-    console.error("Error fetching journel by date:", error);
+    console.error("Error fetching journal by date:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export const getJournelHistory = async (req, res) => {
+export const getJournalHistory = async (req, res) => {
   try {
     const { userId, range } = req.query;
 
@@ -205,57 +199,57 @@ export const getJournelHistory = async (req, res) => {
       startDate = getUTCDateOnly();
     }
 
-    const journels = await Journel.find({
+    const journals = await Journal.find({
       userId,
       date: { $gte: startDate },
     }).sort({ date: 1 });
 
-    return res.status(200).json({ journels });
+    return res.status(200).json({ journals });
   } catch (error) {
-    console.error("Error fetching journel history:", error);
+    console.error("Error fetching journal history:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const getDailyAIReflection = async (req, res) => {
   try {
-    const { userId, date, askAdvice = false, userQuestion = "" } = req.body;
+    const { userId, askAdvice = false, userQuestion = "" } = req.body;
 
-    if (!userId || !date) {
+    if (!userId) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const normalizedDate = normalizeDateOnly(date);
+    const normalizedDate = getUTCDateOnly();
     if (!normalizedDate) {
       return res.status(400).json({ message: "Invalid date" });
     }
 
-    const journel = await Journel.findOne({ userId, date: normalizedDate });
-    if (!journel) {
+    const journal = await Journal.findOne({ userId, date: normalizedDate });
+    if (!journal) {
       return res
         .status(404)
-        .json({ message: "Journel entry not found for the given user and date" });
+        .json({ message: "Journal entry not found for the given user and date" });
     }
 
-    if (!journel.morning || !journel.evening) {
+    if (!journal.morning || !journal.evening) {
       return res.status(400).json({
         message: "Both morning and evening journal are required for daily AI reflection",
       });
     }
 
     const reflection = await generateDailyReflectionFromJournal({
-      journal: journel,
+      journal,
       askAdvice: Boolean(askAdvice),
       userQuestion: typeof userQuestion === "string" ? userQuestion : "",
     });
 
-    journel.aiReflection = {
+    journal.aiReflection = {
       text: reflection,
       model: "openai/gpt-oss-120b",
       generatedAt: new Date(),
     };
 
-    await journel.save();
+    await journal.save();
 
     return res.status(200).json({
       message: "Daily AI reflection generated",
@@ -270,20 +264,18 @@ export const getDailyAIReflection = async (req, res) => {
 
 export const getWeeklyAIInsight = async (req, res) => {
   try {
-    const { userId, endDate, askAdvice = false, userQuestion = "" } = req.body;
+    const { userId, askAdvice = false, userQuestion = "" } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const normalizedEndDate = normalizeDateOnly(endDate || new Date());
-    if (!normalizedEndDate) {
-      return res.status(400).json({ message: "Invalid endDate" });
-    }
+    const normalizedEndDate = getUTCDateOnly();
 
     const cacheKey = getWeeklyInsightCacheKey(userId, normalizedEndDate);
+    let cached = null;
     try {
-      const cached = await redis.get(cacheKey);
+      cached = await redis.get(cacheKey);
       if (cached) {
         const parsedCached = JSON.parse(cached);
         return res.status(200).json({
@@ -298,7 +290,7 @@ export const getWeeklyAIInsight = async (req, res) => {
     const startDate = new Date(normalizedEndDate);
     startDate.setUTCDate(startDate.getUTCDate() - 6);
 
-    const journels = await Journel.find({
+    const journals = await Journal.find({
       userId,
       date: {
         $gte: startDate,
@@ -306,14 +298,14 @@ export const getWeeklyAIInsight = async (req, res) => {
       },
     }).sort({ date: 1 });
 
-    if (journels.length === 0) {
+    if (journals.length === 0) {
       return res.status(404).json({
         message: "No journal history found in the selected 7-day period",
       });
     }
 
     const insights = await generateWeeklyInsightFromJournals({
-      journals: journels,
+      journals: journals,
       askAdvice: Boolean(askAdvice),
       userQuestion: typeof userQuestion === "string" ? userQuestion : "",
     });
@@ -324,9 +316,9 @@ export const getWeeklyAIInsight = async (req, res) => {
         startDate,
         endDate: normalizedEndDate,
       },
-      journalCount: journels.length,
+      journalCount: journals.length,
       insights,
-      fromCache: false,
+      fromCache: cached ? true : false,
     };
 
     try {

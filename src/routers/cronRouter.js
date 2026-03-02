@@ -3,8 +3,32 @@ import * as cronService from '../services/cronService.js';
 
 const router = express.Router();
 
+const logCronRequest = (req) => {
+    const secret = req.headers['x-cron-secret'] || req.query.secret;
+    const maskedSecret = secret
+        ? `${String(secret).slice(0, 2)}***${String(secret).slice(-2)}`
+        : 'none';
+
+    console.log(
+        `[CRON] Incoming request | time=${new Date().toISOString()} | task=${req.query.task || 'none'} | ip=${req.ip} | ua="${req.get('user-agent') || 'unknown'}" | hasSecret=${secret ? 'yes' : 'no'} | secretPreview=${maskedSecret}`
+    );
+};
+
+const attachCronResponseLogger = (req, res, next) => {
+    const startedAt = Date.now();
+    res.on('finish', () => {
+        const durationMs = Date.now() - startedAt;
+        console.log(
+            `[CRON] Completed request | time=${new Date().toISOString()} | task=${req.query.task || 'none'} | status=${res.statusCode} | durationMs=${durationMs} | ip=${req.ip}`
+        );
+    });
+    next();
+};
+
 // Middleware to check for CRON_SECRET
 const verifyCronSecret = (req, res, next) => {
+    logCronRequest(req);
+
     const secret = req.headers['x-cron-secret'] || req.query.secret;
     const expectedSecret = process.env.CRON_SECRET;
 
@@ -22,7 +46,7 @@ const verifyCronSecret = (req, res, next) => {
 };
 
 
-router.get('/run-task', verifyCronSecret, async (req, res) => {
+router.get('/run-task', attachCronResponseLogger, verifyCronSecret, async (req, res) => {
     const { task } = req.query;
 
     try {

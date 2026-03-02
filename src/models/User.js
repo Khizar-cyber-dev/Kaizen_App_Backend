@@ -98,6 +98,17 @@ userSchema.methods.updateStreakOnAppOpen = async function () {
   const today = getUTCDateOnly();
   const todayStr = today.toISOString().split('T')[0];
 
+  // 0. If there's a previous activity date we can determine missed days
+  if (this.lastActive) {
+    const last = getUTCDateOnly(this.lastActive);
+    const diff = Math.floor((today - last) / (1000 * 60 * 60 * 24));
+    // every full day between lastActive and today counts as a missing day except
+    // the day the user was last active and today itself
+    if (diff > 1) {
+      this.missingDays = (this.missingDays || 0) + (diff - 1);
+    }
+  }
+
   // 1. Ensure today is in activeDates (deduplicated)
   const dateExists = this.activeDates.some(d => getUTCDateOnly(d).toISOString().split('T')[0] === todayStr);
   if (!dateExists) {

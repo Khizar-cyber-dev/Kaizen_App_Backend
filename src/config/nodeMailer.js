@@ -17,15 +17,17 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASSWORD,
   },
-  // Harden timeouts and enable pooling to reuse connections
-  connectionTimeout: 10000, // 10s
-  socketTimeout: 10000, // 10s
+  // Timeout and pooling settings
+  connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 20000),
+  greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 15000),
+  dnsTimeout: Number(process.env.SMTP_DNS_TIMEOUT || 15000),
+  socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 60000),
   pool: true,
-  maxConnections: 3,
-  maxMessages: 50,
+  maxConnections: Number(process.env.SMTP_MAX_CONNECTIONS || 2),
+  maxMessages: Number(process.env.SMTP_MAX_MESSAGES || 100),
   // Helpful in debugging non-prod
-  logger: process.env.NODE_ENV !== "production",
-  debug: process.env.NODE_ENV !== "production",
+  logger: process.env.SMTP_DEBUG === "true" || process.env.NODE_ENV !== "production",
+  debug: process.env.SMTP_DEBUG === "true" || process.env.NODE_ENV !== "production",
   // TLS options (be conservative; most providers require modern TLS)
   tls: {
     minVersion: "TLSv1.2",

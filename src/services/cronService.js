@@ -59,48 +59,94 @@ export const checkGoalCompletion = async () => {
  * @param {string} currentHour - The hour for which reminders are being sent (8, 12, or 20).
  */
 export const sendDailyReminders = async (currentHour) => {
-    console.log(`⏰ Cron: Daily reminder jobs for hour ${currentHour}`);
+    console.log(`Cron: Daily reminder jobs for hour ${currentHour}`);
     try {
-        const users = await User.find({ notificationsEnabled: true });
+        const users = await User.find({});
+        const summary = {
+            usersScanned: users.length,
+            notificationsDisabled: 0,
+            usersWithNoEmail: 0,
+            usersWithNoDailyHabits: 0,
+            usersWithNoPendingHabits: 0,
+            emailsAttempted: 0,
+            emailsSent: 0,
+            deliveryReports: [],
+            failedUsers: []
+        };
+
+        const today = getUTCDateOnly();
+        const tomorrow = new Date(today);
+        tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
         for (const user of users) {
-            // Get all active habits for the user
-            const habits = await Habit.find({
-                userId: user._id,
-                isActive: true,
-                frequency: 'daily'
-            });
+            try {
+                if (!user.notificationsEnabled) {
+                    summary.notificationsDisabled += 1;
+                    continue;
+                }
 
-            // Get today's date range
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
+                if (!user.email) {
+                    summary.usersWithNoEmail += 1;
+                    continue;
+                }
 
-            // Get today's completed sessions for habits
-            const todaySessions = await FocusSession.find({
-                userId: user._id,
-                habitId: { $ne: null },
-                status: 'completed',
-                startTime: { $gte: today, $lt: tomorrow }
-            });
+                const habits = await Habit.find({
+                    userId: user._id,
+                    isActive: true,
+                    frequency: 'daily'
+                });
 
-            const completedHabitIds = new Set(
-                todaySessions.map(s => s.habitId.toString())
-            );
+                if (habits.length === 0) {
+                    summary.usersWithNoDailyHabits += 1;
+                    continue;
+                }
 
-            // Find incomplete habits (not completed today)
-            const incompleteHabits = habits.filter(habit =>
-                !completedHabitIds.has(habit._id.toString())
-            );
+                const todaySessions = await FocusSession.find({
+                    userId: user._id,
+                    habitId: { $ne: null },
+                    status: 'completed',
+                    startTime: { $gte: today, $lt: tomorrow }
+                });
 
-            // Send reminder email if there are incomplete habits
-            if (incompleteHabits.length > 0) {
-                await sendDailyReminderEmail(user, incompleteHabits, currentHour);
+                const completedHabitIds = new Set(
+                    todaySessions.map(s => s.habitId.toString())
+                );
+
+                const incompleteHabits = habits.filter(habit =>
+                    !completedHabitIds.has(habit._id.toString())
+                );
+
+                if (incompleteHabits.length === 0) {
+                    summary.usersWithNoPendingHabits += 1;
+                    continue;
+                }
+
+                summary.emailsAttempted += 1;
+                const result = await sendDailyReminderEmail(user, incompleteHabits, currentHour);
+                if (result?.sent) {
+                    summary.emailsSent += 1;
+                }
+                summary.deliveryReports.push({
+                    userId: user._id?.toString?.() || 'unknown',
+                    email: user.email,
+                    accepted: result?.accepted || [],
+                    rejected: result?.rejected || [],
+                    response: result?.response || null,
+                    messageId: result?.messageId || null
+                });
+            } catch (userError) {
+                const failure = {
+                    userId: user._id?.toString?.() || 'unknown',
+                    email: user.email || 'missing-email',
+                    error: userError?.message || String(userError)
+                };
+                summary.failedUsers.push(failure);
+                console.error(`Failed daily reminder for ${failure.email}:`, userError);
             }
         }
-        console.log(`✅ Daily reminders processed for hour ${currentHour}`);
-        return { success: true };
+
+        console.log(`Daily reminders processed for hour ${currentHour}`, summary);
+        return { success: true, summary };
     } catch (error) {
         console.error('Error in daily reminder job:', error);
         throw error;
@@ -133,9 +179,6 @@ export const checkMissedDays = async () => {
             }
 
             if (missedToday) {
-                // ✅ count ONLY 1 missed day per cron
-                user.missingDays += 1;
-
                 const lastActive = user.lastActive
                     ? getUTCDateOnly(user.lastActive)
                     : null;

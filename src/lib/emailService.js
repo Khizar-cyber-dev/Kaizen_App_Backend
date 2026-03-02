@@ -275,7 +275,9 @@ export const sendGoalFailureEmail = async (user, goals) => {
  */
 export const sendDailyReminderEmail = async (user, incompleteHabits, timeOfDay) => {
   try {
-    if (!user.email || !user.notificationsEnabled || incompleteHabits.length === 0) return;
+    if (!user.email || !user.notificationsEnabled || incompleteHabits.length === 0) {
+      return { sent: false, reason: 'not-eligible' };
+    }
 
     const timeLabels = {
       '8': 'Morning',
@@ -335,10 +337,25 @@ export const sendDailyReminderEmail = async (user, incompleteHabits, timeOfDay) 
       html: getEmailTemplate(emailContent.subject, emailContent.html)
     };
 
-    await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mailOptions);
+    const accepted = Array.isArray(info?.accepted) ? info.accepted : [];
+    const rejected = Array.isArray(info?.rejected) ? info.rejected : [];
+
+    if (rejected.length > 0) {
+      throw new Error(`SMTP rejected recipient(s): ${rejected.join(', ')}`);
+    }
+
     console.log(`✅ Daily reminder email sent to ${user.email} at ${timeLabels[timeOfDay]}`);
+    return {
+      sent: true,
+      messageId: info?.messageId || null,
+      accepted,
+      rejected,
+      response: info?.response || null
+    };
   } catch (error) {
     console.error('Error sending daily reminder email:', error);
+    throw error;
   }
 };
 

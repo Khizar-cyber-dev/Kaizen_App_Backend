@@ -45,7 +45,7 @@ const eveningSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const journelSchema = new mongoose.Schema(
+const journalSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -82,7 +82,7 @@ const journelSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-journelSchema.index({ userId: 1, date: 1 }, { unique: true });
+journalSchema.index({ userId: 1, date: 1 }, { unique: true });
 
-const Journel = mongoose.model("Journel", journelSchema);
-export default Journel;
+const Journal = mongoose.model("Journal", journalSchema);
+export default Journal;
