@@ -75,6 +75,11 @@ export const createMorningJournal = async (req, res) => {
       return res.status(400).json({ message: validationError });
     }
 
+    const existingJournal = await Journal.findOne({ userId, date: normalizedDate });
+    if (existingJournal && existingJournal.morning) {
+      return res.status(400).json({ message: "Morning journal already exists for today" });
+    }
+
     const journal = await Journal.findOneAndUpdate(
       { userId, date: normalizedDate },
       {
@@ -121,6 +126,11 @@ export const createEveningJournal = async (req, res) => {
     const validationError = validateJournalPayload({ evening });
     if (validationError) {
       return res.status(400).json({ message: validationError });
+    }
+
+    const existingJournal = await Journal.findOne({ userId, date: normalizedDate });
+    if (existingJournal && existingJournal.evening) {
+      return res.status(400).json({ message: "Evening journal already exists for today" });
     }
 
     const journal = await Journal.findOneAndUpdate(

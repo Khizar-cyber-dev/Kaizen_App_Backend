@@ -146,8 +146,24 @@ userSchema.methods.updateStreakOnAppOpen = async function () {
   this.longestStreak = Math.max(this.longestStreak, this.currentStreak);
   this.lastActive = today;
 
-  this.markModified('activeDates');
-  await this.save();
+  // Use updateOne to avoid version conflicts with concurrent requests
+  try {
+    await this.constructor.updateOne(
+      { _id: this._id },
+      {
+        activeDates: this.activeDates,
+        currentStreak: this.currentStreak,
+        longestStreak: this.longestStreak,
+        lastActive: this.lastActive,
+        missingDays: this.missingDays
+      },
+      { new: true }
+    );
+  } catch (err) {
+    // If update fails due to version conflict, silently continue
+    // The streak calculation is not critical for request flow
+    console.warn('Failed to update streak data:', err.message);
+  }
 
   // 4. Check achievements
   try {

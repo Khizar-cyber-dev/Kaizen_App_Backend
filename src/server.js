@@ -1,17 +1,20 @@
-import 'dotenv/config';
 import express from 'express';
 import connectDB from './config/db.js';
-import './config/cron.js';
 import goalRouter from './routers/goalRouter.js';
 import sessionRouter from './routers/sessionRouter.js';
 import habitRouter from './routers/habitRouter.js';
 import authRouter from './routers/authRouter.js';
 import dailyStatsRouter from './routers/dailyStatsRouter.js';
 import achievementRouter from './routers/achievementsRouter.js';
-import cronRouter from './routers/cronRouter.js';
+// import cronRouter from './routers/cronRouter.js';
 import journalRouter from './routers/journalRouter.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import { registerAllCrons } from './queues/scheduleQueue.js';
+import './workers/emailWorker.js';
+import './workers/habitWorker.js';
+// import './config/cron.js';
+import 'dotenv/config';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,8 +37,9 @@ app.use('/api/habits', habitRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/daily-stats', dailyStatsRouter);
 app.use('/api/achievements', achievementRouter);
-app.use('/api/cron', cronRouter);
+// app.use('/api/cron', cronRouter);
 app.use('/api/journals', journalRouter);
+
 
 app.get('/', (req, res) => {
     res.send('Hello, World!');
@@ -52,7 +56,8 @@ app.use((err, req, res, next) => {
     res.status(500).json({ message: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     connectDB();
+    await registerAllCrons();
     console.log(`Server is running on port ${PORT}`);
 });

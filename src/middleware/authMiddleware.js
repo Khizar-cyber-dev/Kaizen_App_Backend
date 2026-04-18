@@ -21,7 +21,13 @@ export const authMiddleware = async (req, res, next) => {
             return res.status(401).json({ message: 'Not authorized, user not found' });
         }
         req.user = user;
-        await user.updateStreakOnAppOpen();
+        // Update streak asynchronously, don't block authentication if it fails
+        try {
+            await user.updateStreakOnAppOpen();
+        } catch (err) {
+            console.error('Error updating streak on app open:', err.message);
+            // Continue authentication even if streak update fails
+        }
         next();
     } catch (err) {
         console.error(err);

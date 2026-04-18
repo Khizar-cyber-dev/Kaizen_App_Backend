@@ -5,7 +5,7 @@ dotenv.config();
 
 // Prefer port 2525 on PaaS (often open), allow override via env
 const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
-const smtpPort = Number(process.env.SMTP_PORT || 2525);
+const smtpPort = Number(process.env.SMTP_PORT || 587);
 const isSecure = Boolean(process.env.SMTP_SECURE === "true"); // usually false for 2525/587
 
 const transporter = nodemailer.createTransport({
