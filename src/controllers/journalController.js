@@ -223,13 +223,13 @@ export const getJournalHistory = async (req, res) => {
 
 export const getDailyAIReflection = async (req, res) => {
   try {
-    const { userId, askAdvice = false, userQuestion = "" } = req.body;
+    const { userId, askAdvice = false, userQuestion = "", date } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const normalizedDate = getUTCDateOnly();
+    const normalizedDate = date ? getUTCDateOnly(date) : getUTCDateOnly();
     if (!normalizedDate) {
       return res.status(400).json({ message: "Invalid date" });
     }
