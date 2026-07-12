@@ -15,6 +15,7 @@ import './workers/emailWorker.js';
 import './workers/habitWorker.js';
 // import './config/cron.js';
 import 'dotenv/config';
+import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -50,14 +51,14 @@ app.get('/ping', (req, res) => {
     res.json({ message: 'pong' });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-    console.error('Unhandled error:', err);
-    res.status(500).json({ message: 'Internal server error' });
-});
+// 404 + global error handler (must be after routes)
+app.use(notFound);
+app.use(errorHandler);
 
 app.listen(PORT, async () => {
     connectDB();
-    await registerAllCrons();
+    registerAllCrons().catch((err) => {
+        console.error('Cron registration failed (continuing without scheduled jobs):', err?.message || err);
+    });
     console.log(`Server is running on port ${PORT}`);
 });

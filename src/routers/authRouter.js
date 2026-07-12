@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { register, login, logout, refreshToken, sendOtp, verifyOtp, resetOtp, resetPassword, getProfile, syncClerkUser, updateSettings } from "../controllers/authController.js";
+import { register, login, googleLogin, logout, refreshToken, sendOtp, verifyOtp, resetOtp, resetPassword, getProfile, updateSettings } from "../controllers/authController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import { otpRateLimiter, resetOtpRateLimiter } from "../middleware/rateLimiter.js";
 
@@ -11,8 +11,8 @@ router.post('/register', register);
 // Login a user
 router.post('/login', login);
 
-// Sync Clerk user
-router.post('/sync-clerk', syncClerkUser);
+// Login/register with Google directly through backend
+router.post('/google', googleLogin);
 
 // Logout a user
 router.post('/logout', logout);

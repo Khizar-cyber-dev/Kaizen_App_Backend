@@ -3,80 +3,73 @@ import User from '../models/User.js';
 import Habit from '../models/Habit.js';
 import FocusSession from '../models/FocusSession.js';
 import { ACHIEVEMENT_DEFINITIONS } from '../lib/helper.js';
+import AppError from "../lib/AppError.js";
+import { asyncHandler } from "../lib/asyncHandler.js";
 
-export async function getUserAchievements(req, res) {
-  try {
-    const { userId } = req.params;
+export const getUserAchievements = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Proactive checks on view
-    try {
-      await checkStreakAchievements(userId, user);
-      await checkSessionTimeAchievements(userId);
-    } catch (checkError) {
-      console.error("Proactive achievement check failed:", checkError);
-    }
-
-    const userAchievements = await Achievement.find({ userId });
-    console.log("User Achievements:", userAchievements);
-
-    const achievedMap = {};
-    userAchievements.forEach(a => {
-      achievedMap[a.title] = a;
-    });
-    console.log("Achieved Map:", achievedMap);
-
-    const inProgressByType = {};
-
-    const fullList = [];
-
-    for (const key in ACHIEVEMENT_DEFINITIONS) {
-      const def = ACHIEVEMENT_DEFINITIONS[key];
-      const type = def.type;
-
-      if (!inProgressByType[type]) {
-        inProgressByType[type] = false;
-      }
-
-      if (achievedMap[def.title]) {
-        fullList.push({
-          ...def,
-          status: "achieved",
-          dateAchieved: achievedMap[def.title].dateAchieved,
-        });
-      }
-      else if (!inProgressByType[type]) {
-        fullList.push({
-          ...def,
-          status: "in_progress",
-        });
-        inProgressByType[type] = true;
-      }
-      else {
-        fullList.push({
-          ...def,
-          status: "locked",
-        });
-      }
-    }
-
-    return res.status(200).json({
-      message: "User achievements retrieved successfully",
-      achievements: fullList,
-    });
-
-  } catch (error) {
-    console.error("Error retrieving user achievements:", error);
-    return res.status(500).json({
-      message: "Failed to retrieve user achievements",
-      error: error.message,
-    });
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError("User not found", 404);
   }
-}
+
+  // Proactive checks on view
+  try {
+    await checkStreakAchievements(userId, user);
+    await checkSessionTimeAchievements(userId);
+  } catch (checkError) {
+    console.error("Proactive achievement check failed:", checkError);
+  }
+
+  const userAchievements = await Achievement.find({ userId });
+  console.log("User Achievements:", userAchievements);
+
+  const achievedMap = {};
+  userAchievements.forEach(a => {
+    achievedMap[a.title] = a;
+  });
+  console.log("Achieved Map:", achievedMap);
+
+  const inProgressByType = {};
+
+  const fullList = [];
+
+  for (const key in ACHIEVEMENT_DEFINITIONS) {
+    const def = ACHIEVEMENT_DEFINITIONS[key];
+    const type = def.type;
+
+    if (!inProgressByType[type]) {
+      inProgressByType[type] = false;
+    }
+
+    if (achievedMap[def.title]) {
+      fullList.push({
+        ...def,
+        status: "achieved",
+        dateAchieved: achievedMap[def.title].dateAchieved,
+      });
+    }
+    else if (!inProgressByType[type]) {
+      fullList.push({
+        ...def,
+        status: "in_progress",
+      });
+      inProgressByType[type] = true;
+    }
+    else {
+      fullList.push({
+        ...def,
+        status: "locked",
+      });
+    }
+  }
+
+  return res.status(200).json({
+    message: "User achievements retrieved successfully",
+    achievements: fullList,
+  });
+});
 
 export async function checkHabitAchievements(userId, habitId, habitObj = null) {
   const newAchievements = [];

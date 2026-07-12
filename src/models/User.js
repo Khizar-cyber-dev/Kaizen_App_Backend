@@ -16,13 +16,23 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: function () {
-      return !this.clerkId;
+      return !this.clerkId && !this.googleId;
     },
   },
   clerkId: {
     type: String,
     unique: true,
     sparse: true,
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  authProvider: {
+    type: String,
+    enum: ['local', 'clerk', 'google'],
+    default: 'local',
   },
   lastActive: {
     type: Date,
